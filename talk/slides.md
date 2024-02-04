@@ -105,23 +105,52 @@ Depending on the application of course, the first two are the most common. 1 sen
 
 ---
 
-# Interface definition - Messages
+# Interface definition - Protobuf messages
 
-show proto messages
+
+```proto
+syntax = "proto3";
+
+package lotr.proto;
+
+message MordorPopulation {
+    uint64 orc_count = 1;
+    uint32 troll_count = 2;
+    uint32 nazgul_count = 3;
+}
+
+message Weapon {
+    string name = 1;
+    float power = 2;
+}
+
+message AttackResult {
+    uint64 orcs_killed = 1;
+    uint32 trolls_killed = 2;
+    uint32 nazguls_killed = 3;
+}
+```
+
 
 <!--
-package -> namespace, maybe keep app nanmespace and add one level
+gRpc uses google protobuf
+package -> namespace,
+message -> classed with getters and setters
+add repeated field
 -->
 
 ---
 
 # protobuffers
 
-- serializes data, structs , int, floats, strings, byte arrays, and list of other messages
+- Can be used independently of gRPC
+- Messages are defined in `.proto` files
+  -  int, float, string, byte arrays, array of other messages
+- Includes plugins to generate code for various languages
+- Serializes/deserialize messages size and time efficiently
 
 protoc explain
 
-- plugins to generate code for various langages
 - generates c++, h, in build step, normally not checked in, could be if you want to keep track of changes, but .proto is the source
 
 show protoc line
@@ -131,6 +160,18 @@ explain what is generated
 ---
 
 # Interface definition - RPC
+
+gRPC makes additions to the `.proto` files
+
+```proto
+service LotrService {
+    rpc mordor_population(google.protobuf.Empty) returns (MordorPopulation) {}
+    rpc kill_orcs(Weapon) returns (AttackResult) {}
+    rpc subscribeToStatus(google.protobuf.Empty) returns (stream Status) {}
+}
+```
+
+---
 
 **Messaging options**
 
@@ -157,11 +198,18 @@ show service definition
 
 # Server concept
 
-- subclass generated service class (several options)
-- create a `grpc::Server` and add service
+- Subclass generated service class (several options)
+- Create a `grpc::Server` and add a service instance
 - Start the server on the "ip:port" to listen on
-- The server runs until shutdown by other thread - create a new thread for the server
+- The server runs until shutdown by other thread
+- Optionally enable reflection
 
+```cpp
+    grpc::reflection::InitProtoReflectionServerBuilderPlugin();
+```
+<!--
+reflection: can make cli, query for service, methods, arguments and make calls
+-->
 ---
 
 # Synchronous service definition
@@ -229,6 +277,10 @@ private:
     std::unique_ptr<grpc::Server> m_server;
 };
 ```
+<!--
+Generic, can be reused for any service
+-->
+
 ---
 
 # gRPC Server implementation
@@ -240,6 +292,10 @@ GrpcServer::GrpcServer(grpc::Service& service, std::string_view address, uint16_
   } } {}
 ```
 
+---
+
+# gRPC Server implementation, cont
+
 ```cpp
 void GrpcServer::run(grpc::Service& service, const std::string& listening_uri)
 {
@@ -249,13 +305,7 @@ void GrpcServer::run(grpc::Service& service, const std::string& listening_uri)
     m_server = builder.BuildAndStart();
     m_server->Wait();
 }
-
 ```
-
----
-
-# gRPC Server implementation, cont
-
 ```cpp
 void GrpcServer::shutdown()
 {
@@ -265,17 +315,121 @@ void GrpcServer::shutdown()
     }
 }
 ```
+---
+
+# Generic client definition
+
+```cpp
+template<typename Service>
+class GrpcClient
+{
+public:
+    GrpcClient(const std::string& server_address)
+      : m_channel{ grpc::CreateChannel(server_address,
+                   grpc::InsecureChannelCredentials()) }
+      , m_stub{ Service::NewStub(m_channel) } {}
+
+    Service::Stub& stub() { return *m_stub.get(); }
+
+private:
+    std::shared_ptr<grpc::Channel> m_channel;
+    std::unique_ptr<typename Service::Stub> m_stub;
+};
+```
+
+<!--
+Generic, can be reused for any service
+explain channel and stub
+-->
 
 ---
 
-# Client
+# Sync client definition
 
+```cpp
+class SyncClient
+{
+public:
+    SyncClient(std::string_view address, std::uint16_t port);
+
+    std::optional<lotr::proto::MordorPopulation> population();
+
+private:
+    com::GrpcClient<lotr::proto::LotrService> m_grpc_client;
+};
+```
 
 ---
 
-# impl
+# Sync client impl
 
+```cpp
+SyncClient::SyncClient(std::string_view address, std::uint16_t port)
+  : m_grpc_client{ fmt::format("{}:{}", address, port) } {}
+```
 
+```cpp
+std::optional<lotr::proto::MordorPopulation> SyncClient::population()
+{
+    google::protobuf::Empty request;
+    lotr::proto::MordorPopulation response;
+    grpc::ClientContext context;
+
+    const auto status = m_grpc_client.stub().
+        mordor_population(&context, request, &response);
+
+    if (!status.ok()) {
+        return std::nullopt;
+    }
+
+    return response;
+}
+```
+<!--
+can use context to set deadlines and other meta data
+    context.set_deadline(std::chrono::system_clock::now() + 2s);
+-->
+
+---
+
+# ClientContext options
+
+Set deadline, how long to wait until call is aborted
+```cpp
+context.set_deadline(std::chrono::system_clock::now() + 2s);
+```
+
+Compression
+```cpp
+context.set_compression_algorithm(GRPC_COMPRESS_GZIP);
+```
+
+Add meta data, http header key value pairs
+```cpp
+context.AddMetadata("custom-header", "Custom Value");
+```
+
+And credentials, cancellation, keep alive, "wait for ready", etc...
+
+---
+
+# Same with callbacks, async
+
+---
+
+# Some streaming
+
+---
+
+# Same as done on neti ???
+
+---
+
+# Python client
+
+---
+
+# Typescript client
 
 ---
 
