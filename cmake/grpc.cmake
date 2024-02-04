@@ -13,7 +13,7 @@ file(MAKE_DIRECTORY ${out_folder})
 #
 # generate_proto_cpp(LIB_NAME proto1 proto2 ...)
 #   LIB_NAME    name of static lib to create
-#   protox      relative path to protofiles
+#   protoX      relative path to protofiles
 # ~~~
 function(generate_proto_cpp LIB_NAME)
     if(NOT ARGN)

@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package lotr.proto;
+
+import "google/protobuf/empty.proto";
+
+service LotrService {
+    rpc mordor_population(google.protobuf.Empty) returns (MordorPopulation) {}
+    rpc kill_orcs(Weapon) returns (AttackResult) {}
+    rpc subscribeToStatus(google.protobuf.Empty) returns (stream Status) {}
+}
+
+message MordorPopulation {
+    uint64 orc_count = 1;
+    uint32 troll_count = 2;
+    uint32 nazgul_count = 3;
+    bool sauron_alive = 4;
+}
+
+message Weapon {
+    string name = 1;
+    float power = 2;
+}
+
+message AttackResult {
+    uint64 orcs_killed = 1;
+    uint32 trolls_killed = 2;
+    uint32 nazguls_killed = 3;
+}
+
+message Status {
+    float mordor_strenght = 1;
+    float gondor_strenght = 2;
+    uint64 orc_count = 3;
+}
+
