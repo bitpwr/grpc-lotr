@@ -2,7 +2,7 @@
 marp: true
 author: "Per-Magnus Holtmo"
 title: "gRPC stuff"
-header: "**header**"
+header: "_header_"
 footer: "_footer_"
 #theme: gaia
 #_class: lead
@@ -12,6 +12,10 @@ paginate: true
 ---
 
 # gRPC for "embedded" devices
+
+# gRPC by example
+
+# gRPC goes LOTR
 
 ---
 
@@ -38,6 +42,7 @@ connection handling and messaging
 
 
 <!--
+lots of alternatives
 REST is common, especially for web or cloud based systems
 json is human readable but takes space, parsing not that efficient
 -->
@@ -49,7 +54,7 @@ json is human readable but takes space, parsing not that efficient
 - Created by Google 2015
 - An RPC framework supporting most languages
 - Uses Google Protocol buffers for data serialization
-- Uses http 2 as transport layer
+- HTTP/2 as transport layer
 
 <!--
 today I gonna tell you about gRPC and how it works
@@ -58,22 +63,25 @@ It is a very large library, will cover the basics
 
 ---
 
-# We all think 'g' stands for Google
+# 'g' stands for Google, right?
 
 ---
 
 # No, 'g' stands for...
 
-- **1.0** 'g' stands for 'gRPC'
-- **1.1** 'g' stands for 'good'
-- **1.2** 'g' stands for 'green'
-- **1.3** 'g' stands for 'gentle'
+- **1.0** 'g' stands for '**gRPC**'
+- **1.1** 'g' stands for '**good**'
+- **1.2** 'g' stands for '**green**'
+- **1.3** 'g' stands for '**gentle**'
 ...
-- **1.59** 'g' stands for 'generative'
-- **1.60** 'g' stands for 'gjallarhorn'
-- **1.61** 'g' stands for 'grand'
-- **1.62** 'g' stands for 'guardian'
+- **1.59** 'g' stands for '**generative**'
+- **1.60** 'g' stands for '**gjallarhorn**'
+- **1.61** 'g' stands for '**grand**'
+- **1.62** 'g' stands for '**guardian**'
 
+
+<!--
+TOO MUCH TEXT
 ---
 
 # Advantages
@@ -98,6 +106,7 @@ here I gonna explain one way with asynchronous support
 - build, conan,
 - requires http2 - cannot directly access from most browsers, need to run a proxy that converts http/1 <> htt/2
 
+-->
 
 <!--
 Depending on the application of course, the first two are the most common. 1 send or get data/settings to/from server. 2 can be used to subscribe to events on the server, which I'll show later
@@ -105,18 +114,44 @@ Depending on the application of course, the first two are the most common. 1 sen
 
 ---
 
-# Interface definition - Protobuf messages
+# Lord of the rings game
 
+<!--
+Lets make a simple game engine for lord of the rings
+we must stop sauron and mordor from taking over middle earth
+
+I will skip some details and focus on the basics for better understanding
+all details ara available in GitHub if anyone wants more
+
+Will focus on code instead of bullets
+Please interrupt with questions
+-->
+
+- Service interface library
+- Host the gRPC service
+- Client applications
+- Sync and async examples
+
+---
+
+# Interface library
+
+- Define interface in a protocol buffers file: `.proto`
+- Generate code
+- Build a library
+
+---
+
+# Interface messages - lotr.proto
 
 ```proto
-syntax = "proto3";
-
 package lotr.proto;
 
 message MordorPopulation {
     uint64 orc_count = 1;
     uint32 troll_count = 2;
     uint32 nazgul_count = 3;
+    bool sauron_alive = 4;
 }
 
 message Weapon {
@@ -141,27 +176,71 @@ add repeated field
 
 ---
 
-# protobuffers
+# Protocol buffers
+
+Generate code for supported languages, e.g. as C++:
+```sh
+protoc -I include/path --cpp-out build/proto lotr.proto
+```
+Output:  `lotr.pb.h` and `lotr.pb.cc`
+
+Serialize
+```cpp
+Weapon weapon;
+weapon.set_name("Sting")
+auto data = weapon.SerializeAsString();
+```
+Deserialize
+
+```cpp
+Weapon weapon;
+weapon.ParseFromString(data);
+auto name = weapon.name()
+```
+
+<!--
+string is normally used as data buffer, can use array and streams
+-->
+
+<!--
+---
+
+
+# SKIP ???
 
 - Can be used independently of gRPC
 - Messages are defined in `.proto` files
   -  int, float, string, byte arrays, array of other messages
 - Includes plugins to generate code for various languages
 - Serializes/deserialize messages size and time efficiently
+- `protoc` can generate `name.pb.h/cc` and `name.grpc.pb.h/cc` files.
 
-protoc explain
+```cpp
+auto data = msg.SerializeAsString();
 
-- generates c++, h, in build step, normally not checked in, could be if you want to keep track of changes, but .proto is the source
+```
+-->
 
-show protoc line
 
-explain what is generated
+<!--
+will not go into details how to use the protocompiler, give it the protofile and out path
+it will generate include and impl files (google mock code optional)
+I have it all in cmake, will show you link at the end
 
 ---
+-->
 
-# Interface definition - RPC
 
-gRPC makes additions to the `.proto` files
+<!--
+Depending on the use case, if the list of messages is known, one could use unary RPC with one message
+containing an array of other messages
+-->
+---
+
+# Interface functions - RPC
+
+gRPC makes additions to the `.proto` files to define a Service.
+
 
 ```proto
 service LotrService {
@@ -171,28 +250,39 @@ service LotrService {
 }
 ```
 
+When running `protoc`
+
+```sh
+protoc --grpc_out=build/proto --plugin=protoc-gen-grpc=grpc_cpp_plugin lotr.proto
+```
+Output: `name.grpc.pb.h` and `name.grpc.pb.cc`
+
+
+<!---
+- Unary RPC
+- Server streaming
+- Client streaming
+- Bidirectional streaming
+-->
+
 ---
 
-**Messaging options**
+# Make a library with the interface code
 
-- Unary RPC, simple request reply (get/set)
-- Server streaming, client sends one request, server responds with a stream to read several messages from, until server marks the end
-- Client streaming, client writes a sequence of messages and wait for server to handle all.
-- Bidirectional streaming, provides independent read/write streams.
+Contains proto files and optional C++ helper types
+Exposes needed headers for both server and client
 
+```cmake
+include(../cmake/grpc.cmake)
+
+generate_proto_cpp(lotr-proto protos/lotr.proto)
 ```
-show service definition
-```
 
----
-
-# Put in library
-
-- proto -> cpp -> lib
-- used by both server and clinet
-- defines the interface
-- use version
-
+<!---
+- good practice
+- used by both server and client
+- can be given a version, generated at build time, can ask server for protocol version
+-->
 
 ---
 
@@ -209,6 +299,7 @@ show service definition
 ```
 <!--
 reflection: can make cli, query for service, methods, arguments and make calls
+These are the basics, will make this step by step
 -->
 ---
 
@@ -285,6 +376,8 @@ Generic, can be reused for any service
 
 # gRPC Server implementation
 
+_MAYBE SKIP THIS ONE_
+
 ```cpp
 GrpcServer::GrpcServer(grpc::Service& service, std::string_view address, uint16_t port)
   : m_server_thread{ [this, &service, address, port]() {
@@ -294,7 +387,7 @@ GrpcServer::GrpcServer(grpc::Service& service, std::string_view address, uint16_
 
 ---
 
-# gRPC Server implementation, cont
+# gRPC Server implementation
 
 ```cpp
 void GrpcServer::run(grpc::Service& service, const std::string& listening_uri)
@@ -315,6 +408,13 @@ void GrpcServer::shutdown()
     }
 }
 ```
+---
+
+# Time to make a client
+
+- Generic client, holding gRPC _channel_ and _stub_
+- Specialized client
+
 ---
 
 # Generic client definition
@@ -361,13 +461,18 @@ private:
 
 ---
 
+# _CONTINUE HERE_
+
+---
+
 # Sync client impl
 
+<!--
 ```cpp
 SyncClient::SyncClient(std::string_view address, std::uint16_t port)
   : m_grpc_client{ fmt::format("{}:{}", address, port) } {}
 ```
-
+-->
 ```cpp
 std::optional<lotr::proto::MordorPopulation> SyncClient::population()
 {
@@ -385,11 +490,6 @@ std::optional<lotr::proto::MordorPopulation> SyncClient::population()
     return response;
 }
 ```
-<!--
-can use context to set deadlines and other meta data
-    context.set_deadline(std::chrono::system_clock::now() + 2s);
--->
-
 ---
 
 # ClientContext options
@@ -410,6 +510,10 @@ context.AddMetadata("custom-header", "Custom Value");
 ```
 
 And credentials, cancellation, keep alive, "wait for ready", etc...
+
+---
+
+# Demo synchronous messages
 
 ---
 
