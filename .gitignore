@@ -1,0 +1,9 @@
+build*
+deps/
+
+.direnv
+.envrc
+penv
+
+.vscode
+CMakeUserPresets.json
