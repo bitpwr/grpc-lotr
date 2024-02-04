@@ -8,12 +8,14 @@ find_package(
 )
 find_package(fmt REQUIRED)
 
-add_library(${lib_name} src/application.cpp src/middleearth.cpp src/options.cpp)
+add_library(
+    ${lib_name} src/application.cpp src/middleearth.cpp src/options.cpp src/sync_service.cpp
+)
 target_include_directories(${lib_name} PUBLIC src)
 target_link_libraries(
     ${lib_name}
     PRIVATE Boost::program_options
-    PUBLIC fmt::fmt Boost::system
+    PUBLIC fmt::fmt Boost::system lotr-proto utils
 )
 setup_target(${lib_name})
 

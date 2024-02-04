@@ -2,6 +2,8 @@
 #include "options.hpp"
 
 #include <fmt/format.h>
+#include <grpcpp/ext/proto_server_reflection_plugin.h>
+#include <grpcpp/health_check_service_interface.h>
 
 int main(int argc, char** argv)
 {
@@ -11,7 +13,10 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
     }
 
-    lotr::Application app{};
+    grpc::EnableDefaultHealthCheckService(true);
+    grpc::reflection::InitProtoReflectionServerBuilderPlugin();
+
+    lotr::Application app{ options.value() };
 
     try {
         app.run();
