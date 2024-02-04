@@ -1,4 +1,4 @@
-#include "middleearth.hpp"
+#include "application.hpp"
 #include "options.hpp"
 
 #include <fmt/format.h>
@@ -11,10 +11,10 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
     }
 
-    lotr::MiddleEarth middleEarth{};
+    lotr::Application app{};
 
     try {
-        middleEarth.run();
+        app.run();
     } catch (const std::exception& e) {
         fmt::print("unexpected failure: {}\n", e.what());
         return EXIT_FAILURE;

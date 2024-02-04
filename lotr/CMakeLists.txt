@@ -8,7 +8,7 @@ find_package(
 )
 find_package(fmt REQUIRED)
 
-add_library(${lib_name} src/middleearth.cpp src/options.cpp)
+add_library(${lib_name} src/application.cpp src/middleearth.cpp src/options.cpp)
 target_include_directories(${lib_name} PUBLIC src)
 target_link_libraries(
     ${lib_name}

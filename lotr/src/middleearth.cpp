@@ -2,48 +2,55 @@
 
 #include <fmt/format.h>
 
+using namespace std::chrono_literals;
+
 namespace {
-constexpr int exit_code = 128;
-}
+constexpr auto timer_interval{ 1000ms };
+constexpr auto mordor_strength_increase{ 0.09f };
+} // namespace
 
 namespace lotr {
 
-MiddleEarth::MiddleEarth()
-  : m_signals(m_context, SIGINT, SIGTERM)
+MiddleEarth::MiddleEarth(boost::asio::io_context& context, Callbacks callbacks)
+  : m_context{ context }
+  , m_timer{ m_context }
+  , m_callbacks{ std::move(callbacks) }
 {
-    m_signals.async_wait([this](const boost::system::error_code& error, int signal) {
-        if (error) {
-            fmt::print("signal handler error: {}\n", error.message());
-            return;
-        }
-
-        switch (signal) {
-            case SIGINT:
-            case SIGTERM:
-                fmt::print("shutting down on signal ({})\n", signal);
-                shutdown();
-                exit(exit_code + signal);
-                break;
-            default:
-                fmt::print("unknown signal ({})\n", signal);
-                break;
-        }
-    });
-}
-
-void MiddleEarth::run()
-{
-    m_context.run();
+    fmt::print("Middle Earth alive\n");
+    start_timer();
 }
 
 void MiddleEarth::shutdown()
 {
-    m_context.stop();
+    fmt::print("Middle Earth going down\n");
+    m_timer.cancel();
 }
 
-boost::asio::io_context& MiddleEarth::context()
+void MiddleEarth::start_timer()
 {
-    return m_context;
+    m_timer.expires_after(timer_interval);
+    m_timer.async_wait([this](const boost::system::error_code& ec) {
+        if (ec) {
+            if (ec == boost::asio::error::operation_aborted) {
+                return;
+            }
+            fmt::print("Timer failed: {}\n", ec.message());
+        }
+        on_timer();
+        start_timer();
+    });
+}
+
+void MiddleEarth::on_timer()
+{
+    m_status.mordor_strength += mordor_strength_increase;
+    fmt::print("Mordor strenght: {:.1f}%\n", m_status.mordor_strength * 100);
+
+    if (m_status.mordor_strength >= 1) {
+        fmt::print("Sauron has taken over Middle Earth. The end is here...\n");
+        m_timer.cancel();
+        m_callbacks.game_over();
+    }
 }
 
 } // namespace lotr

@@ -1,23 +1,35 @@
 #pragma once
 
 #include <boost/asio/io_context.hpp>
-#include <boost/asio/signal_set.hpp>
+#include <boost/asio/steady_timer.hpp>
 
 namespace lotr {
+
+struct Status
+{
+    float mordor_strength{};
+};
 
 class MiddleEarth
 {
 public:
-    MiddleEarth();
+    struct Callbacks
+    {
+        std::function<void()> game_over;
+    };
 
-    void run();
+    MiddleEarth(boost::asio::io_context& context, Callbacks callbacks);
+
     void shutdown();
 
-    boost::asio::io_context& context();
-
 private:
-    boost::asio::io_context m_context;
-    boost::asio::signal_set m_signals;
+    void start_timer();
+    void on_timer();
+
+    boost::asio::io_context& m_context;
+    boost::asio::steady_timer m_timer;
+    Status m_status;
+    Callbacks m_callbacks;
 };
 
 } // namespace lotr
