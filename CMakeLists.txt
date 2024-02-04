@@ -12,4 +12,5 @@ include(cmake/compiler-warnings.cmake)
 set_compiler_warnings()
 
 add_subdirectory(lotr-proto)
+add_subdirectory(utils)
 add_subdirectory(lotr)
