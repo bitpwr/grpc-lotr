@@ -1,6 +1,13 @@
 # gRPC goes LOTR
 
-Simple applications to try `gRPC`.
+Simple applications to learn [gRPC](https://grpc.io/).
+
+## Folder structure
+
+- lotr - application hosting `gRPC` services.
+- lotr-proto - library with the `gRPC` interface.
+- sync-client - application with the most basic synchronous client.
+- utils - library with some common types.
 
 ## Prerequisites
 
@@ -27,4 +34,8 @@ and run
 
 ``` sh
 ./bin/lotr
+```
+
+``` sh
+./bin/sync-client
 ```
