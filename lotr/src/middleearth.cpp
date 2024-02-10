@@ -29,7 +29,7 @@ MiddleEarth::MiddleEarth(boost::asio::io_context& context, Callbacks callbacks)
   , m_mordor_population{ .orc_count = 1000,
                          .troll_count = 10,
                          .nazgul_count = 9,
-                         .sauron_count = 1 }
+                         .sauron_alive = true }
 {
     fmt::print("Middle Earth alive\n");
     start_timer();
@@ -46,9 +46,9 @@ const MordorPopulation& MiddleEarth::mordor_population()
     return m_mordor_population;
 }
 
-std::uint64_t MiddleEarth::kill_orcs(std::string_view weapon, float power)
+std::optional<std::uint64_t> MiddleEarth::kill_orcs(std::string_view weapon, float power)
 {
-    fmt::print("{} with {}%\n", weapon, power);
+    fmt::print("kill orcs using '{}' with {}%\n", weapon, power);
     const auto orcs_killed = static_cast<std::uint64_t>(
       static_cast<float>(m_mordor_population.orc_count) * power * random_effect());
     m_mordor_population.orc_count -= orcs_killed;

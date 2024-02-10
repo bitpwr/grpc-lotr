@@ -5,6 +5,7 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <functional>
+#include <optional>
 
 namespace lotr {
 
@@ -26,7 +27,7 @@ public:
     void shutdown();
 
     const MordorPopulation& mordor_population();
-    std::uint64_t kill_orcs(std::string_view weapon, float power);
+    std::optional<std::uint64_t> kill_orcs(std::string_view weapon, float power);
 
 private:
     void start_timer();

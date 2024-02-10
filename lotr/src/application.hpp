@@ -23,6 +23,7 @@ private:
     boost::asio::io_context m_context;
     boost::asio::signal_set m_signals;
     MiddleEarth m_middleEarth;
+    ServiceCallbacks m_callbacks;
     SyncService m_sync_service;
     utils::GrpcServer m_grpc_server;
 };

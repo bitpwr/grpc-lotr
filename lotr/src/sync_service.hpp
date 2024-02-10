@@ -1,3 +1,4 @@
+#pragma once
 
 #include "lotr.hpp"
 
@@ -8,13 +9,7 @@ namespace lotr {
 class SyncService : public proto::LotrService::Service
 {
 public:
-    struct Callbacks
-    {
-        std::function<MordorPopulation()> population;
-        std::function<std::uint64_t(std::string_view, float)> kill_orcs;
-    };
-
-    SyncService(Callbacks callbacks);
+    SyncService(const ServiceCallbacks& callbacks);
 
     grpc::Status mordor_population(grpc::ServerContext* context,
                                    const google::protobuf::Empty* request,
@@ -27,7 +22,7 @@ public:
     void shutdown();
 
 private:
-    Callbacks m_callbacks;
+    const ServiceCallbacks& m_callbacks;
 };
 
 } // namespace lotr

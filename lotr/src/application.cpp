@@ -1,4 +1,5 @@
 #include "application.hpp"
+#include "lotr.hpp"
 
 #include <fmt/format.h>
 
@@ -7,10 +8,11 @@ namespace lotr {
 Application::Application(const Options& options)
   : m_signals{ m_context, SIGINT, SIGTERM }
   , m_middleEarth{ m_context, { [this]() { shutdown(); } } }
-  , m_sync_service{ SyncService::Callbacks{
-      .population = [this]() { return m_middleEarth.mordor_population(); },
-      .kill_orcs = [this](std::string_view name,
-                          float power) { return m_middleEarth.kill_orcs(name, power); } } }
+  , m_callbacks{ [this]() { return m_middleEarth.mordor_population(); },
+                 [this](std::string_view name, float power) {
+                     return m_middleEarth.kill_orcs(name, power);
+                 } }
+  , m_sync_service{ m_callbacks }
   , m_grpc_server{ m_sync_service, options.address, options.port }
 {
     m_signals.async_wait([this](const boost::system::error_code& error, int signal) {
