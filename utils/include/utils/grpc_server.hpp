@@ -9,12 +9,12 @@ namespace utils {
 class GrpcServer
 {
 public:
-    GrpcServer(grpc::Service& service, std::string_view address, uint16_t port);
+    GrpcServer(std::vector<grpc::Service*> services, std::string_view address, uint16_t port);
 
     void shutdown();
 
 private:
-    void run(grpc::Service& service, const std::string& listening_uri);
+    void run(const std::vector<grpc::Service*>& services, const std::string& listening_uri);
 
     std::thread m_server_thread;
     std::unique_ptr<grpc::Server> m_server;

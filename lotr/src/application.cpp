@@ -13,7 +13,7 @@ Application::Application(const Options& options)
                      return m_middleEarth.kill_orcs(name, power);
                  } }
   , m_sync_service{ m_callbacks }
-  , m_grpc_server{ m_sync_service, options.address, options.port }
+  , m_grpc_server{ { &m_sync_service }, options.address, options.port }
 {
     m_signals.async_wait([this](const boost::system::error_code& error, int signal) {
         if (error) {

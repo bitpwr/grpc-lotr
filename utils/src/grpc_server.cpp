@@ -5,18 +5,23 @@
 
 namespace utils {
 
-GrpcServer::GrpcServer(grpc::Service& service, std::string_view address, uint16_t port)
-  : m_server_thread{ [this, &service, address, port]() {
-      run(service, fmt::format("{}:{}", address, port));
+GrpcServer::GrpcServer(std::vector<grpc::Service*> services,
+                       std::string_view address,
+                       uint16_t port)
+  : m_server_thread{ [this, services = std::move(services), address, port]() {
+      run(services, fmt::format("{}:{}", address, port));
   } }
 {
 }
 
-void GrpcServer::run(grpc::Service& service, const std::string& listening_uri)
+void GrpcServer::run(const std::vector<grpc::Service*>& services, const std::string& listening_uri)
 {
     grpc::ServerBuilder builder;
     builder.AddListeningPort(listening_uri, grpc::InsecureServerCredentials());
-    builder.RegisterService(&service);
+    for (const auto service : services) {
+
+        builder.RegisterService(service);
+    }
 
     m_server = builder.BuildAndStart();
 
