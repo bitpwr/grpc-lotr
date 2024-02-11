@@ -20,10 +20,14 @@ std::optional<Options> parse(int argc, char** argv)
       "address,a",
       boost::program_options::value<std::string>(&options.address)->default_value(options.address),
       "service listening address");
-    description.add_options()(
-      "port,p",
-      boost::program_options::value<std::uint16_t>(&options.port)->default_value(options.port),
-      "service port");
+    description.add_options()("sync_port,p",
+                              boost::program_options::value<std::uint16_t>(&options.sync_port)
+                                ->default_value(options.sync_port),
+                              "service synchronous port");
+    description.add_options()("async_port,q",
+                              boost::program_options::value<std::uint16_t>(&options.async_port)
+                                ->default_value(options.async_port),
+                              "service asynchronous port");
 
     boost::program_options::variables_map vm;
     try {

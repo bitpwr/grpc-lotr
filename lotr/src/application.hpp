@@ -1,5 +1,6 @@
 #pragma once
 
+#include "async_service.hpp"
 #include "middleearth.hpp"
 #include "options.hpp"
 #include "sync_service.hpp"
@@ -25,7 +26,9 @@ private:
     MiddleEarth m_middleEarth;
     ServiceCallbacks m_callbacks;
     SyncService m_sync_service;
-    utils::GrpcServer m_grpc_server;
+    AsyncService m_async_service;
+    utils::GrpcServer m_grpc_sync_server;
+    utils::GrpcServer m_grpc_async_server;
 };
 
 } // namespace lotr

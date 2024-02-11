@@ -13,7 +13,9 @@ Application::Application(const Options& options)
                      return m_middleEarth.kill_orcs(name, power);
                  } }
   , m_sync_service{ m_callbacks }
-  , m_grpc_server{ { &m_sync_service }, options.address, options.port }
+  , m_async_service{ m_context, m_callbacks }
+  , m_grpc_sync_server{ { &m_sync_service }, options.address, options.sync_port }
+  , m_grpc_async_server{ { &m_async_service }, options.address, options.async_port }
 {
     m_signals.async_wait([this](const boost::system::error_code& error, int signal) {
         if (error) {
@@ -43,7 +45,9 @@ void Application::run()
 void Application::shutdown()
 {
     m_sync_service.shutdown();
-    m_grpc_server.shutdown();
+    m_async_service.shutdown();
+    m_grpc_sync_server.shutdown();
+    m_grpc_async_server.shutdown();
     m_middleEarth.shutdown();
     m_context.stop();
 }

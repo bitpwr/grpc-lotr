@@ -9,7 +9,12 @@ find_package(
 find_package(fmt REQUIRED)
 
 add_library(
-    ${lib_name} src/application.cpp src/middleearth.cpp src/options.cpp src/sync_service.cpp
+    ${lib_name}
+    src/application.cpp
+    src/async_service.cpp
+    src/middleearth.cpp
+    src/options.cpp
+    src/sync_service.cpp
 )
 target_include_directories(${lib_name} PUBLIC src)
 target_link_libraries(
