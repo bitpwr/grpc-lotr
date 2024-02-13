@@ -11,11 +11,8 @@ paginate: true
 #backgroundImage: url('https://marp.app/assets/hero-background.svg')
 ---
 
-# gRPC for "embedded" devices
-
-# gRPC by example
-
-# gRPC goes LOTR
+# Using gRPC to fight Sauron
+## Hands on approach to gRPC
 
 ---
 
@@ -444,7 +441,7 @@ explain channel and stub
 
 ---
 
-# Sync client definition
+# Synchronous client definition
 
 ```cpp
 class SyncClient
@@ -455,14 +452,9 @@ public:
     std::optional<lotr::proto::MordorPopulation> population();
 
 private:
-    com::GrpcClient<lotr::proto::LotrService> m_grpc_client;
+    GrpcClient<lotr::proto::LotrService> m_grpc_client;
 };
 ```
-
----
-
-# _CONTINUE HERE_
-
 ---
 
 # Sync client impl
@@ -517,8 +509,260 @@ And credentials, cancellation, keep alive, "wait for ready", etc...
 
 ---
 
-# Same with callbacks, async
+# We need asynchronous message handling
 
+**Do not use the suggested async api!**
+
+But there is a callback interface...
+
+<!--
+Way too much boiler plate
+Completion queues, polling or waiting, threading etc etc, will not mention it
+
+callback interface makes unary async calls very simple
+stream calls still requires lot of extra code, maybe it will be improved as well
+-->
+
+---
+
+# Asynchronous service definition
+
+```cpp
+class AsyncService : public proto::LotrService::CallbackService
+{
+public:
+    AsyncService(boost::asio::io_context& context, const ServiceCallbacks& callbacks);
+
+    grpc::ServerUnaryReactor* mordor_population(grpc::CallbackServerContext* context,
+                                                const google::protobuf::Empty* request,
+                                                proto::MordorPopulation* response) override;
+
+    grpc::ServerUnaryReactor* kill_orcs(grpc::CallbackServerContext* context,
+                                        const proto::Weapon* request,
+                                        proto::AttackResult* response) override;
+};
+```
+
+<!--
+inherit from CallbackService
+provide a boost asio context for threading/handover, callbacks to get data
+
+new return types, return a reactor instead of status directly
+new ServerContext
+-->
+
+---
+
+# Asynchronous service implementation
+
+```cpp
+grpc::ServerUnaryReactor* AsyncService::mordor_population(grpc::CallbackServerContext* context,
+                                                          const google::protobuf::Empty*,
+                                                          proto::MordorPopulation* response)
+{
+    auto reactor = context->DefaultReactor();
+
+    boost::asio::post(m_io_context, [reactor, response, this] {
+        const auto pop = m_callbacks.population();
+
+        response->set_orc_count(pop.orc_count);
+        response->set_troll_count(pop.troll_count);
+        response->set_nazgul_count(pop.nazgul_count);
+        response->set_sauron_alive(pop.sauron_alive);
+
+        reactor->Finish(grpc::Status::OK);
+    });
+
+    return reactor;
+}
+```
+
+<!--
+called by grpc thread, must return directly
+for unary calls, there is a simple reactor to use, return directly, later call Finish() on it to
+return to client
+
+using boost asio to handover to main thread, access state
+access state, set response, call Finish()
+
+common setup, we could add helper function, we could check arguments, add error handling
+will show in a bit
+
+BUT there is a problem with this simple setup
+When se are shutting down the server, the main thread is about to stop grpc server
+there might come a call, post to asio context, will never be run and finish will never be called
+-->
+---
+
+# UnaryExecutor
+
+```cpp
+void UnaryExecutor::shutdown()
+{
+    m_block = true;
+}
+
+grpc::ServerUnaryReactor* UnaryExecutor::execute(grpc::CallbackServerContext* callback_context,
+                                                 const std::function<grpc::Status()>& work)
+{
+    auto reactor = callback_context->DefaultReactor();
+
+    if (m_block) {
+        reactor->Finish(grpc::Status::CANCELLED);
+        return reactor;
+    }
+
+    boost::asio::post(m_io_context, [reactor, work]() {
+        const auto status = work();
+        reactor->Finish(std::move(status));
+    });
+
+    return reactor;
+}
+```
+<!--
+Class, has a asio context and a blocking flag
+execute(), provide function that returns gprc status
+if block, set cancel and return
+otherwise, call func and mark the result
+
+Let's see how it can be used
+-->
+---
+
+# UnaryExecutor usage
+
+```cpp
+grpc::ServerUnaryReactor* AsyncService::kill_orcs(grpc::CallbackServerContext* context,
+                                                  const proto::Weapon* request,
+                                                  proto::AttackResult* response)
+{
+    if (request->power() < 0 || request->power() > 1) {
+        auto reactor = context->DefaultReactor();
+        reactor->Finish({ grpc::StatusCode::INVALID_ARGUMENT, "Power must be between 0 and 1" });
+        return reactor;
+    }
+
+    return m_executor.execute(context, [this, request, response]() {
+        const auto result = m_callbacks.kill_orcs(request->name(), request->power());
+        if (!result) {
+            return grpc::Status{ grpc::StatusCode::INTERNAL, "Too late, Sauron has taken over" };
+        }
+
+        response->set_orcs_killed(result.value());
+        return grpc::Status::OK;
+    });
+}
+```
+<!--
+In our overridden function,
+first quick check of arguments
+the call execute(), providing a simple function, only focusing on the state handling
+ - called on main thread
+ - check result
+ - fill response
+-->
+
+---
+
+# Async client definition
+
+```cpp
+class AsyncClient
+{
+public:
+    AsyncClient(boost::asio::io_context& context, std::string_view address, std::uint16_t port);
+
+    using KillHandler = std::function<void(const grpc::Status&, std::uint64_t)>;
+
+    void kill_orcs(std::string_view weapon_name, float power, KillHandler handler);
+
+private:
+    boost::asio::io_context& m_io_context;
+    utils::GrpcClient<lotr::proto::LotrService> m_grpc_client;
+};
+```
+
+<!--
+similar to the sync client
+here we use boost asio to do the work
+
+here we have void functions, but provide a callback
+
+-->
+
+---
+
+# gRPC client callback interface
+
+```cpp
+stub().async()->kill_orcs(grpc::ClientContext* context,
+                          const proto::Weapon* request,
+                          proto::AttackResult* response,
+                          std::function<void(grpc::Status)> f);
+```
+
+```cpp
+template<typename Request, typename Response>
+struct ClientState
+{
+    grpc::ClientContext context;
+    Request request;
+    Response response;
+};
+```
+
+<!--
+for the sync case, we used function on the stub directly
+and there is an async object where the callback functions hide
+
+provide a context, request, response, and a callback with the status result
+this func will return directly, but we need to keep track of the provided objects
+they muse be kept in memory until the callback is called. And there may be many calls before
+the first returns....
+
+so that is the state we must store util done
+-->
+---
+
+# Async client implementation
+
+
+```cpp
+void AsyncClient::kill_orcs(std::string_view weapon_name, float power, KillHandler handler)
+{
+    auto state =
+      std::make_shared<utils::ClientState<lotr::proto::Weapon, lotr::proto::AttackResult>>();
+
+    state->request.set_name(std::string(weapon_name));
+    state->request.set_power(power);
+
+    m_grpc_client.stub().async()->kill_orcs(
+      &state->context,
+      &state->request,
+      &state->response,
+      [&io_context = m_io_context, state, handler = std::move(handler)](grpc::Status status) {
+          boost::asio::post(
+            io_context,
+            [handler = std::move(handler), status, orcs_killed = state->response.orcs_killed()]() {
+                handler(status, orcs_killed);
+            });
+      });
+}
+```
+
+<!--
+Create the state as a shared pointer
+- set request values, optional context options
+
+call function, provide pointers to objects
+and a lambda for the status result, capture the state in a lambda to keep it alive, handler
+
+callback called by grpc, must handover to our main thread, here using boost asio again
+
+call handler with result on main thread
+
+-->
 ---
 
 # Some streaming
