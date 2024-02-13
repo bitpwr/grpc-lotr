@@ -6,6 +6,14 @@
 
 namespace utils {
 
+template<typename Request, typename Response>
+struct ClientState
+{
+    grpc::ClientContext context;
+    Request request;
+    Response response;
+};
+
 template<typename Service>
 class GrpcClient
 {
