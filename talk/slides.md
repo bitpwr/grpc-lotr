@@ -1,7 +1,7 @@
 ---
 marp: true
 author: "Per-Magnus Holtmo"
-title: "gRPC stuff"
+title: "Using gRPC to fight Mordor"
 header: "_header_"
 footer: "_footer_"
 #theme: gaia
@@ -11,17 +11,18 @@ paginate: true
 #backgroundImage: url('https://marp.app/assets/hero-background.svg')
 ---
 
-# Using gRPC to fight Sauron
-## Hands on approach to gRPC
+# Using gRPC to fight Mordor
+## Hands on approach to use gRPC with `C++`
+
+_Per-Magnus Holtmo_
 
 ---
 
-# How to set up efficient communication
+# Micro service architecture
 
-Image with micro services
+![width:1000px](services.png)
 
 <!--
-try drawio app
 how to setup safe, stable, efficient, easy to work with
 connection handling and messaging
 -->
@@ -30,9 +31,9 @@ connection handling and messaging
 
 # Some alternatives
 
-- REST - http 1 and json
-- MQTT - needs a broker
-- RabbitMq, ZeroMq, Stream...
+- REST - HTTP/1 and json
+- MQTT
+- RabbitMqQ, ZeroMQ, Kafka,...
 - Implement your own using raw sockets
 - Some needs a broker process
 - or...
@@ -48,7 +49,7 @@ json is human readable but takes space, parsing not that efficient
 
 # We could use gRPC
 
-- Created by Google 2015
+- Created by Google, open source 2015
 - An RPC framework supporting most languages
 - Uses Google Protocol buffers for data serialization
 - HTTP/2 as transport layer
@@ -56,6 +57,8 @@ json is human readable but takes space, parsing not that efficient
 <!--
 today I gonna tell you about gRPC and how it works
 It is a very large library, will cover the basics
+
+I wil explain concept using code examples - a lot of code
 -->
 
 ---
@@ -78,34 +81,6 @@ It is a very large library, will cover the basics
 
 
 <!--
-TOO MUCH TEXT
----
-
-# Advantages
-
-- an API contract, typed function calls (REST normally uses json strings)
-- arguments are efficiently serialized using protobuf
-- code generation for messages and server/client stubs in "any" language. (can be different)
-- support implementation wither side in "any" language
-- supports streaming, i.e. one end sends messages continuously
-- http/2 gives more efficient and long lived connections, compared to http/1. gives TLS support if required
-
----
-
-# Disadvantages
-
-- complex and large code base
-- not the best documentation
-- several ways to do the same thing
-- synchronous/asynchronous
-here I gonna explain one way with asynchronous support
-- requires large code base
-- build, conan,
-- requires http2 - cannot directly access from most browsers, need to run a proxy that converts http/1 <> htt/2
-
--->
-
-<!--
 Depending on the application of course, the first two are the most common. 1 send or get data/settings to/from server. 2 can be used to subscribe to events on the server, which I'll show later
 -->
 
@@ -124,10 +99,10 @@ Will focus on code instead of bullets
 Please interrupt with questions
 -->
 
+- Server exposing a gRPC service
 - Service interface library
-- Host the gRPC service
 - Client applications
-- Sync and async examples
+- Synchronous and asynchronous examples
 
 ---
 
@@ -185,14 +160,14 @@ Serialize
 ```cpp
 Weapon weapon;
 weapon.set_name("Sting")
-auto data = weapon.SerializeAsString();
+const auto data = weapon.SerializeAsString();
 ```
 Deserialize
 
 ```cpp
 Weapon weapon;
 weapon.ParseFromString(data);
-auto name = weapon.name()
+const auto name = weapon.name()
 ```
 
 <!--
@@ -279,6 +254,7 @@ generate_proto_cpp(lotr-proto protos/lotr.proto)
 - good practice
 - used by both server and client
 - can be given a version, generated at build time, can ask server for protocol version
+- provides include paths to headers
 -->
 
 ---
@@ -304,13 +280,11 @@ These are the basics, will make this step by step
 
 ```cpp
 
-#include "lotr.grpc.pb.h"
+#include <lotr.grpc.pb.h>
 
 class SyncService : public proto::LotrService::Service
 {
 public:
-    SyncService() = default;
-
     grpc::Status mordor_population(grpc::ServerContext* context,
                                    const google::protobuf::Empty* request,
                                    proto::MordorPopulation* response) override;
@@ -373,19 +347,6 @@ Generic, can be reused for any service
 
 # gRPC Server implementation
 
-_MAYBE SKIP THIS ONE_
-
-```cpp
-GrpcServer::GrpcServer(grpc::Service& service, std::string_view address, uint16_t port)
-  : m_server_thread{ [this, &service, address, port]() {
-      run(service, fmt::format("{}:{}", address, port));
-  } } {}
-```
-
----
-
-# gRPC Server implementation
-
 ```cpp
 void GrpcServer::run(grpc::Service& service, const std::string& listening_uri)
 {
@@ -421,8 +382,8 @@ template<typename Service>
 class GrpcClient
 {
 public:
-    GrpcClient(const std::string& server_address)
-      : m_channel{ grpc::CreateChannel(server_address,
+    GrpcClient(const std::string& server_url)
+      : m_channel{ grpc::CreateChannel(server_url,
                    grpc::InsecureChannelCredentials()) }
       , m_stub{ Service::NewStub(m_channel) } {}
 
@@ -436,7 +397,8 @@ private:
 
 <!--
 Generic, can be reused for any service
-explain channel and stub
+- channel provides a connection to a gRPC server on a specified host and port
+- stub is create on client side form the channel - provides function api
 -->
 
 ---
@@ -455,9 +417,10 @@ private:
     GrpcClient<lotr::proto::LotrService> m_grpc_client;
 };
 ```
+
 ---
 
-# Sync client impl
+# Synchronous client implementation
 
 <!--
 ```cpp
@@ -466,11 +429,17 @@ SyncClient::SyncClient(std::string_view address, std::uint16_t port)
 ```
 -->
 ```cpp
+Stub::mordor_population(grpc::ClientContext* context,
+                        const google::protobuf::Empty& request,
+                        proto::MordorPopulation* response);
+```
+
+```cpp
 std::optional<lotr::proto::MordorPopulation> SyncClient::population()
 {
+    grpc::ClientContext context;
     google::protobuf::Empty request;
     lotr::proto::MordorPopulation response;
-    grpc::ClientContext context;
 
     const auto status = m_grpc_client.stub().
         mordor_population(&context, request, &response);
@@ -592,6 +561,28 @@ BUT there is a problem with this simple setup
 When se are shutting down the server, the main thread is about to stop grpc server
 there might come a call, post to asio context, will never be run and finish will never be called
 -->
+
+---
+
+# UnaryExecutor
+
+```cpp
+class UnaryExecutor
+{
+public:
+    explicit UnaryExecutor(boost::asio::io_context& context);
+
+    void shutdown();
+
+    grpc::ServerUnaryReactor* execute(grpc::CallbackServerContext* callback_context,
+                                      const std::function<grpc::Status()>& work);
+
+private:
+    boost::asio::io_context& m_io_context;
+    bool m_block{ false };
+};
+```
+
 ---
 
 # UnaryExecutor
@@ -779,10 +770,37 @@ call handler with result on main thread
 
 # Typescript client
 
+
+---
+
+# Advantages
+
+- an API contract, typed function calls (REST normally uses json strings)
+- arguments are efficiently serialized using protobuf
+- code generation for messages and server/client stubs in "any" language. (can be different)
+- support implementation wither side in "any" language
+- supports streaming, i.e. one end sends messages continuously
+- http/2 gives more efficient and long lived connections, compared to http/1. gives TLS support if required
+
+---
+
+# Disadvantages
+
+- complex and large code base
+- not the best documentation
+- several ways to do the same thing
+- synchronous/asynchronous
+here I gonna explain one way with asynchronous support
+- requires large code base
+- build, conan,
+- requires http2 - cannot directly access from most browsers, need to run a proxy that converts http/1 <> htt/2
+
 ---
 
 # Not covered
 
+
+- Clients in other languages, e.g. Python or Typescript
 - Authentication and encryption
 
 ---
