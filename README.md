@@ -1,6 +1,8 @@
-# gRPC goes LOTR
+# C++ gRPC examples inspired by Lord Of The Rings
 
-Simple applications to learn [gRPC](https://grpc.io/).
+Simple applications to learn [gRPC](https://grpc.io/) with C++. The server interface is built
+into a separate library, used by both the server and the clients. Contains both synchronous and
+asynchronous examples.
 
 ## Folder structure
 
@@ -11,7 +13,8 @@ Simple applications to learn [gRPC](https://grpc.io/).
 
 ## Prerequisites
 
-We use [Conan package manager](https://conan.io/) to get the required third parties.
+We use [Conan package manager](https://conan.io/) to get the required third parties,
+such as gRPC, boost and fmt.
 
 ## Setup
 
