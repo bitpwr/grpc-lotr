@@ -9,12 +9,25 @@ AsyncService::AsyncService(boost::asio::io_context& context, const ServiceCallba
   : m_io_context{ context }
   , m_callbacks{ callbacks }
   , m_executor{ context }
+  , m_status_writer{ context }
 {
 }
 
 void AsyncService::shutdown()
 {
     m_executor.shutdown();
+    m_status_writer.shutdown();
+}
+
+void AsyncService::send_status(const GameStatus& game_status, const MordorPopulation& population)
+{
+    proto::GameStatus status;
+
+    status.set_mordor_strenght(game_status.mordor_strength);
+    status.set_gondor_strenght(game_status.gondor_strength);
+    status.set_orc_count(population.orc_count);
+
+    m_status_writer.send_message(status);
 }
 
 grpc::ServerUnaryReactor* AsyncService::mordor_population(grpc::CallbackServerContext* context,
@@ -57,6 +70,13 @@ grpc::ServerUnaryReactor* AsyncService::kill_orcs(grpc::CallbackServerContext* c
         response->set_orcs_killed(result.value());
         return grpc::Status::OK;
     });
+}
+
+grpc::ServerWriteReactor<proto::GameStatus>* AsyncService::subscribeToStatus(
+  grpc::CallbackServerContext*,
+  const google::protobuf::Empty*)
+{
+    return m_status_writer.create_writer();
 }
 
 } // namespace lotr

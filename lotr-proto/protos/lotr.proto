@@ -7,7 +7,7 @@ import "google/protobuf/empty.proto";
 service LotrService {
     rpc mordor_population(google.protobuf.Empty) returns (MordorPopulation) {}
     rpc kill_orcs(Weapon) returns (AttackResult) {}
-    rpc subscribeToStatus(google.protobuf.Empty) returns (stream Status) {}
+    rpc subscribeToStatus(google.protobuf.Empty) returns (stream GameStatus) {}
 }
 
 message MordorPopulation {
@@ -28,9 +28,8 @@ message AttackResult {
     uint32 nazguls_killed = 3;
 }
 
-message Status {
+message GameStatus {
     float mordor_strenght = 1;
     float gondor_strenght = 2;
     uint64 orc_count = 3;
 }
-

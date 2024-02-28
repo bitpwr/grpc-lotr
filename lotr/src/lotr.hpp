@@ -7,6 +7,12 @@
 
 namespace lotr {
 
+struct GameStatus
+{
+    float mordor_strength{};
+    float gondor_strength{};
+};
+
 struct MordorPopulation
 {
     std::uint64_t orc_count;
