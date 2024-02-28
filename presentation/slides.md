@@ -16,6 +16,12 @@ paginate: true
 
 _Per-Magnus Holtmo_
 
+<!--
+question - to start interact
+payoff - what to learn
+story - why trust me
+-->
+
 ---
 
 # Micro service architecture
@@ -103,6 +109,7 @@ Please interrupt with questions
 - Service interface library
 - Client applications
 - Synchronous and asynchronous examples
+- And some streaming
 
 ---
 
@@ -158,16 +165,16 @@ Output:  `lotr.pb.h` and `lotr.pb.cc`
 
 Serialize
 ```cpp
-Weapon weapon;
-weapon.set_name("Sting")
+lotr::proto::Weapon weapon;
+weapon.set_name("Sting");
 const auto data = weapon.SerializeAsString();
 ```
 Deserialize
 
 ```cpp
-Weapon weapon;
+lotr::proto::Weapon weapon;
 weapon.ParseFromString(data);
-const auto name = weapon.name()
+const auto name = weapon.name();
 ```
 
 <!--
@@ -218,7 +225,7 @@ gRPC makes additions to the `.proto` files to define a Service.
 service LotrService {
     rpc mordor_population(google.protobuf.Empty) returns (MordorPopulation) {}
     rpc kill_orcs(Weapon) returns (AttackResult) {}
-    rpc subscribeToStatus(google.protobuf.Empty) returns (stream Status) {}
+    rpc subscribeToStatus(google.protobuf.Empty) returns (stream GameStatus) {}
 }
 ```
 
@@ -227,7 +234,7 @@ When running `protoc`
 ```sh
 protoc --grpc_out=build/proto --plugin=protoc-gen-grpc=grpc_cpp_plugin lotr.proto
 ```
-Output: `name.grpc.pb.h` and `name.grpc.pb.cc`
+Output: `lotr.grpc.pb.h` and `lotr.grpc.pb.cc`
 
 
 <!---
@@ -235,6 +242,8 @@ Output: `name.grpc.pb.h` and `name.grpc.pb.cc`
 - Server streaming
 - Client streaming
 - Bidirectional streaming
+
+no need to think about error codes, that is implicitly handled, will show later
 -->
 
 ---
@@ -259,9 +268,11 @@ generate_proto_cpp(lotr-proto protos/lotr.proto)
 
 ---
 
-# Server concept
+# Server and Service concepts
 
-- Subclass generated service class (several options)
+A **Server** exposes one or more **services** on a port
+
+- Inherit from a generated service class (several options)
 - Create a `grpc::Server` and add a service instance
 - Start the server on the "ip:port" to listen on
 - The server runs until shutdown by other thread
@@ -276,7 +287,7 @@ These are the basics, will make this step by step
 -->
 ---
 
-# Synchronous service definition
+# Service definition
 
 ```cpp
 
@@ -293,11 +304,10 @@ public:
 <!--
 include generated file, subclass a service - many options, here the most simple for sync
 override methods
-server context needed for async only
 -->
 ---
 
-# Synchronous service implementation
+# Service implementation
 
 ```cpp
 grpc::Status SyncService::mordor_population(grpc::ServerContext*,
@@ -313,10 +323,8 @@ grpc::Status SyncService::mordor_population(grpc::ServerContext*,
 ```
 
 <!--
-for sync - skip context
-no care about the empty request
+CALLED FROM GRPC THREAD POOL, ensure to guard shared data
 returned Status - error code and message, predefined error codes
-Called from a thread pool in grpc, ensure to guard shared data
 -->
 
 ---
@@ -375,7 +383,7 @@ void GrpcServer::shutdown()
 
 ---
 
-# Generic client definition
+# Generic client helper
 
 ```cpp
 template<typename Service>
@@ -403,7 +411,7 @@ Generic, can be reused for any service
 
 ---
 
-# Synchronous client definition
+# Client definition
 
 ```cpp
 class SyncClient
@@ -411,16 +419,16 @@ class SyncClient
 public:
     SyncClient(std::string_view address, std::uint16_t port);
 
-    std::optional<lotr::proto::MordorPopulation> population();
+    std::optional<proto::MordorPopulation> population();
 
 private:
-    GrpcClient<lotr::proto::LotrService> m_grpc_client;
+    GrpcClient<proto::LotrService> m_grpc_client;
 };
 ```
 
 ---
 
-# Synchronous client implementation
+# Client implementation
 
 <!--
 ```cpp
@@ -435,11 +443,11 @@ Stub::mordor_population(grpc::ClientContext* context,
 ```
 
 ```cpp
-std::optional<lotr::proto::MordorPopulation> SyncClient::population()
+std::optional<proto::MordorPopulation> SyncClient::population()
 {
     grpc::ClientContext context;
     google::protobuf::Empty request;
-    lotr::proto::MordorPopulation response;
+    proto::MordorPopulation response;
 
     const auto status = m_grpc_client.stub().
         mordor_population(&context, request, &response);
@@ -451,6 +459,10 @@ std::optional<lotr::proto::MordorPopulation> SyncClient::population()
     return response;
 }
 ```
+
+<!--
+CALL WILL BLOCK - synchronous
+--->
 ---
 
 # ClientContext options
@@ -474,15 +486,26 @@ And credentials, cancellation, keep alive, "wait for ready", etc...
 
 ---
 
-# Demo synchronous messages
+# Demo
 
 ---
 
-# We need asynchronous message handling
+# But there is a problem...
+
+<!--
+- we make an attack, using best wapon, will just stand still waiting, waiting for the result, cannot move
+- leaving us vulnerable
+- we need to be able to move right after the attack
+- we need asynchronous message handling
+-->
+
+---
+
+# Asynchronous message handling
 
 **Do not use the suggested async api!**
 
-But there is a callback interface...
+_But there is a callback interface..._
 
 <!--
 Way too much boiler plate
@@ -558,7 +581,7 @@ common setup, we could add helper function, we could check arguments, add error 
 will show in a bit
 
 BUT there is a problem with this simple setup
-When se are shutting down the server, the main thread is about to stop grpc server
+When we are shutting down the server, the main thread is about to stop grpc server
 there might come a call, post to asio context, will never be run and finish will never be called
 -->
 
@@ -579,7 +602,7 @@ public:
 
 private:
     boost::asio::io_context& m_io_context;
-    bool m_block{ false };
+    std::atomic<bool> m_block{ false };
 };
 ```
 
@@ -662,7 +685,9 @@ the call execute(), providing a simple function, only focusing on the state hand
 class AsyncClient
 {
 public:
-    AsyncClient(boost::asio::io_context& context, std::string_view address, std::uint16_t port);
+    AsyncClient(boost::asio::io_context& context,
+                std::string_view address,
+                std::uint16_t port);
 
     using KillHandler = std::function<void(const grpc::Status&, std::uint64_t)>;
 
@@ -670,7 +695,7 @@ public:
 
 private:
     boost::asio::io_context& m_io_context;
-    utils::GrpcClient<lotr::proto::LotrService> m_grpc_client;
+    GrpcClient<proto::LotrService> m_grpc_client;
 };
 ```
 
@@ -687,10 +712,10 @@ here we have void functions, but provide a callback
 # gRPC client callback interface
 
 ```cpp
-stub().async()->kill_orcs(grpc::ClientContext* context,
-                          const proto::Weapon* request,
-                          proto::AttackResult* response,
-                          std::function<void(grpc::Status)> f);
+Stub::async::kill_orcs(grpc::ClientContext* context,
+                       const proto::Weapon* request,
+                       proto::AttackResult* response,
+                       std::function<void(grpc::Status)> f);
 ```
 
 ```cpp
@@ -718,12 +743,11 @@ so that is the state we must store util done
 
 # Async client implementation
 
-
 ```cpp
 void AsyncClient::kill_orcs(std::string_view weapon_name, float power, KillHandler handler)
 {
     auto state =
-      std::make_shared<utils::ClientState<lotr::proto::Weapon, lotr::proto::AttackResult>>();
+      std::make_shared<ClientState<proto::Weapon, proto::AttackResult>>();
 
     state->request.set_name(std::string(weapon_name));
     state->request.set_power(power);
@@ -752,24 +776,337 @@ and a lambda for the status result, capture the state in a lambda to keep it ali
 callback called by grpc, must handover to our main thread, here using boost asio again
 
 call handler with result on main thread
+client does not have to bother about threading
+as soon as post calls returns, state object is deleted, no more references left
 
 -->
+
+---
+
+# Message streaming
+
+- Unary calls basically all you need
+  - Send large arrays of messages
+  - Get state
+- But some kind of event notification would be nice
+
+<!--
 ---
 
 # Some streaming
 
+
+documented case
+client make a call and expects a fixed number of messages back during a short period of time
+then the stream is closed.
+can be solved with a message holding repeated field for a large list of messages
+
+Design choice - one large message or several small, not very interesting to show
+
+more interesting could be
+client subscribes to server, expecting events at an interval or at state change
+connected forever, or reconnects at failure
+
+you would also know that the server is running, otherwise the subscription fails
+and you could try to resubscribe
+Could have any number of clients connected, all would get the same status
+
+maybe show simplest writer/reader
+no specific error handling
+and mentions the problems
+READER: destructor must wait for on done, conditional_variable, mutex etc
+
+TODO: MAKE SIMPLER WRITER
+
+C++ how to wait until variable is set by other thread
+
+and we have several clients connected (must copy message)
+
+SENDER: must hold on to message, until sent, could move message, but must support many clients, keep until all done
+- how to send new message when prev is not sent, skip, buffer (how large), are you sending regularly or just at change
+-->
+
 ---
 
-# Same as done on neti ???
+# Server streaming
+
+**RPC definition**
+```proto
+service LotrService {
+    rpc subscribeToStatus(google.protobuf.Empty) returns (stream GameStatus) {}
+}
+```
+
+**Method to override**
+```cpp
+grpc::ServerWriteReactor<proto::GameStatus>* subscribeToStatus(
+      grpc::CallbackServerContext* context,
+      const google::protobuf::Empty* request) override;
+```
+
+<!--
+send stream example, client requests a set of messages, server sends as fast as possible, then done
+might be use cases, SEE ABOVE
+more interesting to turn info subscription, kept a live forever
+no in arg
+
+we return a writerReactor - for unary calls, use the default, simple, but for streams, we must impl
+our own
+
+no response variable - use the writeReactor
+
+-->
 
 ---
 
-# Python client
+# Server streaming
+
+* `MessageWriter` - writes one message at a time
+* `StreamWriter` - handles several clients
+* Update our service
 
 ---
 
-# Typescript client
+<!--
+will skip shutdown, will take too long time
+but as I said, shutting down is the hard part, will have that code available on GitHub
+-->
 
+# MessageWriter
+
+```cpp
+template<typename Message>
+class MessageWriter : public grpc::ServerWriteReactor<Message>
+{
+public:
+    MessageWriter(boost::asio::io_context& io, const DoneCallback& done)
+
+    void send_message(const Message& msg)
+
+    void OnWriteDone(bool ok) override
+    void OnDone() override
+    void OnCancel() override
+};
+```
+
+---
+
+# MessageWriter sending messages
+
+```cpp
+void send_message(const Message& msg) {
+    std::scoped_lock<std::mutex> lock(m_message_mutex);
+    if (m_message || m_done) {
+        return;
+    }
+    m_message = msg;
+    StartWrite(&m_message.value());
+}
+
+void OnWriteDone(bool) override
+{
+    std::scoped_lock<std::mutex> lock(m_message_mutex);
+    m_message.reset();
+}
+```
+
+<!--
+---
+
+# MessageWriter shutting down
+
+
+```cpp
+void shutdown()
+{
+    if (!m_done) {
+        this->Finish(grpc::Status(grpc::ABORTED, "Service shutdown"));
+        m_done = true;
+    }
+}
+
+void OnDone() override
+{
+    this->m_context.post([this]() { m_done_callback(); });
+}
+
+void OnCancel() override
+{
+    m_done = true;
+    this->Finish(grpc::Status::CANCELLED);
+}
+```
+-->
+---
+
+# StreamWriter to handle multiple clients
+
+```cpp
+template<typename Message>
+class StreamWriter
+{
+public:
+    grpc::ServerWriteReactor<Message>* create_writer();
+    void send_message(const Message& msg)
+
+private:
+    std::vector<Writer> m_writers;
+};
+```
+---
+
+# StreamWriter sending a message
+
+```cpp
+grpc::ServerWriteReactor<Message>* StreamWriter::create_writer()
+{
+    ++m_id;
+    auto& w = m_writers.emplace_back(
+                std::make_unique<MessageWriter<Message>>(...), m_id);
+
+    return w.writer.get();
+}
+
+void StreamWriter::send_message(const Message& msg)
+{
+    std::ranges::for_each(m_writers,
+        [&msg](auto& w) { w.writer->send_message(msg); });
+}
+```
+<!--
+There is some more thread handling required,
+create_writer() called on gRPC thread, protect vector and block at shutdown
+-->
+
+<!--
+
+---
+
+# StreamWriter shutting down
+
+
+```cpp
+void StreamWriter::shutdown()
+{
+    std::ranges::for_each(m_writers, [](auto& w) { w.writer->shutdown(); });
+    while (!m_writers.empty()) {
+        m_context.run_one_for(std::chrono::milliseconds{ 10 });
+    }
+}
+
+void StreamWriter::remove_writer(std::uint32_t id)
+{
+    const auto it = std::ranges::find_if(m_writers,
+        [id](const auto& w) { return w.id == id; });
+
+    if (it != m_writers.end()) {
+        m_writers.erase(it);
+    }
+}
+```
+-->
+
+---
+
+# StreamWriter usage
+
+```cpp
+grpc::ServerWriteReactor<proto::GameStatus>* AsyncService::subscribeToStatus(..)
+{
+    return m_status_writer.create_writer();
+}
+
+void AsyncService::send_status(const GameStatus& s)
+{
+    proto::GameStatus status;
+
+    status.set_mordor_strenght(s.mordor_strength);
+    status.set_gondor_strenght(s.gondor_strength);
+    status.set_orc_count(s.orc_count);
+
+    m_status_writer.send_message(status);
+}
+```
+---
+
+# How to read streams
+
+Generated client method
+```cpp
+void Stub::async::subscribeToStatus(grpc::ClientContext* context,
+                                    const google::protobuf::Empty* request,
+                                    grpc::ClientReadReactor<proto::GameStatus>* reactor)
+```
+
+---
+
+# StreamReader - reading one message at a time
+
+```cpp
+template<typename Message>
+class StreamReader : public grpc::ClientReadReactor<Message>
+{
+public:
+    StreamReader(MessageHandler message_handler, ...)
+
+    void start();
+    grpc::ClientContext* client_context();
+
+    void OnReadDone(bool ok) override;
+    void OnDone(const grpc::Status& status) override;
+
+private:
+    Message m_message;
+};
+```
+
+---
+
+# StreamReader message reading
+
+```cpp
+void StreamReader::start()
+{
+    StartCall();
+    StartRead(&m_message);
+}
+
+void StreamReader::OnReadDone(bool ok) override
+{
+    if (ok) {
+        boost::asio::post(m_io_context, [this]() {
+            m_message_handler(m_message);
+            StartRead(&m_message);
+        });
+    }
+}
+```
+
+---
+
+# StreamReader usage
+
+```cpp
+void AsyncClient::subscribeToStatus()
+{
+    m_status_reader = std::make_unique<StreamReader<proto::GameStatus>>(
+        m_io_context,
+        [](const proto::GameStatus& status) {
+            // ...
+        },
+        [this](grpc::Status status) {
+            // ...
+            m_status_reader.reset();
+        });
+
+    m_grpc_client.stub().async()->subscribeToStatus(
+        m_status_reader->client_context(),
+        &empty_proto_msg,
+        m_status_reader.get());
+
+    m_status_reader->start();
+}
+```
 
 ---
 
@@ -802,10 +1139,33 @@ here I gonna explain one way with asynchronous support
 
 - Clients in other languages, e.g. Python or Typescript
 - Authentication and encryption
+- there are more lifetime issues at shutdown that are hard to handle due to multithreading
+
+---
+
+# Are we connected?
+
+- `gRPC` keep alive channel option
+- Query channel if connected
+- Use any `gRPC` message and check response status
+
+
+<!--
+Interesting question, how to know if you are connected with the service?
+
+there are keep alive options (internal pings with configurable intervals and timeouts)
+or you can ask channel if connected - very slow 5 sec to connect
+or having an own unary call which is very fast
+BUT if you know NOW we are connected, everything is fine, then when you do something,
+connection might have been lost - so it does not say that much
+=> ensure your services are always running (systemd or other means) and proper error handling
+
+-->
+
 
 ---
 
 # Thank you
 
+Source code:
 - link to GitHub
-- email?
