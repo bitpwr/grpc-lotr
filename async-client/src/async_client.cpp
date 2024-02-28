@@ -6,12 +6,21 @@
 
 using namespace std::chrono_literals;
 
+namespace {
+google::protobuf::Empty empty_proto_msg;
+}
+
 AsyncClient::AsyncClient(boost::asio::io_context& context,
                          std::string_view address,
                          std::uint16_t port)
   : m_io_context{ context }
   , m_grpc_client{ fmt::format("{}:{}", address, port) }
 {
+}
+
+void AsyncClient::shutdown()
+{
+    unsubscribeToStatus();
 }
 
 bool AsyncClient::connected()
@@ -55,4 +64,34 @@ void AsyncClient::kill_orcs(std::string_view weapon_name, float power, KillHandl
                 handler(status, orcs_killed);
             });
       });
+}
+
+void AsyncClient::subscribeToStatus(StatusHandler status_handler, DoneHandler done_handler)
+{
+    if (m_status_reader) {
+        fmt::print("Already subscribing\n");
+        return;
+    }
+
+    m_status_reader = std::make_unique<utils::StreamReader<lotr::proto::GameStatus>>(
+      m_io_context,
+      [handler = std::move(status_handler)](const lotr::proto::GameStatus& status) {
+          handler(status);
+      },
+      [this, handler = std::move(done_handler)](grpc::Status status) {
+          m_status_reader.reset();
+          handler(status);
+      });
+
+    m_grpc_client.stub().async()->subscribeToStatus(
+      m_status_reader->client_context(), &empty_proto_msg, m_status_reader.get());
+
+    m_status_reader->start();
+}
+
+void AsyncClient::unsubscribeToStatus()
+{
+    if (m_status_reader) {
+        m_status_reader->shutdown();
+    }
 }

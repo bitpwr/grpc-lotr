@@ -14,8 +14,8 @@ public:
 
     void run()
     {
-        fmt::print(
-          "Enter command, kill (k), population (p),\nsubscribe (s), unsubscribe (u), quit (x)\n");
+        fmt::print("Enter command, kill (k), population (p), connected (c),\nsubscribe (s), "
+                   "unsubscribe (u), quit (x,q)\n");
         get_cmd();
         context.run();
     }
@@ -58,7 +58,24 @@ public:
                         }
                         fmt::print("Yay, killed {} orcs\n", orcs_killed);
                     });
-              } else if (cmd == "x") {
+              } else if (cmd == "c") {
+                  fmt::print("Connected: {}\n", client.connected());
+              } else if (cmd == "s") {
+                  client.subscribeToStatus(
+                    [](const auto& status) {
+                        fmt::print("Mordor strength: {:.1f}%, orc count: {}\n",
+                                   status.mordor_strenght() * 100,
+                                   status.orc_count());
+                    },
+                    [](const auto& status) {
+                        fmt::print("Status reader done: {}, {}\n",
+                                   static_cast<int>(status.error_code()),
+                                   status.error_message());
+                    });
+              } else if (cmd == "u") {
+                  client.unsubscribeToStatus();
+              } else if (cmd == "x" || cmd == "q") {
+                  client.shutdown();
                   return;
               } else {
                   fmt::print("Unknown command: {}\n", cmd);
