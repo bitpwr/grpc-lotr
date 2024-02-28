@@ -26,7 +26,7 @@ public:
 
     Service::Stub& stub() { return *m_stub.get(); }
 
-    bool connected() { return m_channel->GetState(true) == GRPC_CHANNEL_READY; }
+    bool connected() const { return m_channel->GetState(true) == GRPC_CHANNEL_READY; }
 
 private:
     std::shared_ptr<grpc::Channel> m_channel;
