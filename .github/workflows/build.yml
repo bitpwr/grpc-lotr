@@ -1,0 +1,44 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  BUILD_TYPE: Release
+  BUILD_FOLDER: build
+  CONAN_VERSION: 2.0.17
+
+jobs:
+  ubuntu-build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install Conan
+      run: |
+        pip3 install wheel setuptools
+        pip3 install conan==${{ env.CONAN_VERSION }} --upgrade
+        conan --version
+      shell: bash
+
+    - name: Install dependencies
+      run: |
+        conan profile detect
+        ./install_deps.sh
+      shell: bash
+
+    - name: Configure
+      run: |
+        mkdir ${{env.BUILD_FOLDER}}
+        cmake -B ${{env.BUILD_FOLDER}} -S ${{github.workspace}} \
+          -DCMAKE_TOOLCHAIN_FILE=${{github.workspace}}/deps/conan_toolchain.cmake \
+          -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+    - name: Build
+      run: cmake --build ${{env.BUILD_FOLDER}}
