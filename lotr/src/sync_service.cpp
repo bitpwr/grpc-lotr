@@ -19,7 +19,6 @@ grpc::Status SyncService::mordor_population(grpc::ServerContext*,
                                             const google::protobuf::Empty*,
                                             proto::MordorPopulation* response)
 {
-    fmt::print("got sync population request\n");
     // this call is not thread safe, but this synchronous service is just for show
     const auto pop = m_callbacks.population();
     std::this_thread::sleep_for(200ms);
@@ -34,8 +33,6 @@ grpc::Status SyncService::kill_orcs(grpc::ServerContext*,
                                     const proto::Weapon* request,
                                     proto::AttackResult* response)
 {
-    fmt::print("kill orcs with {} power {}\n", request->name(), request->power());
-
     // this call is not thread safe, but this synchronous service is just for show
     const auto result = m_callbacks.kill_orcs(request->name(), request->power());
     if (!result) {

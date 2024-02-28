@@ -1,44 +1,63 @@
-# C++ gRPC examples inspired by Lord Of The Rings
+# C++ gRPC examples inspired by Lord of the Rings
 
 Simple applications to learn [gRPC](https://grpc.io/) with C++. The server interface is built
 into a separate library, used by both the server and the clients. Contains both synchronous and
-asynchronous examples.
+asynchronous examples as well as server streaming support.
 
 ## Folder structure
 
-- lotr - application hosting `gRPC` services.
-- lotr-proto - library with the `gRPC` interface.
-- sync-client - application with the most basic synchronous client.
-- utils - library with some common types.
+- `lotr` - application hosting gRPC services.
+- `lotr-proto` - library with the gRPC interface.
+- `sync-client` - application with the most basic synchronous client.
+- `async-client` - asynchronous application with streaming support.
+- `utils` - library with some common types.
+- `cmake` - some CMake helpers.
+- `presentation` - slides describing the gRPC concepts used.
 
 ## Prerequisites
 
-We use [Conan package manager](https://conan.io/) to get the required third parties,
-such as gRPC, boost and fmt.
+We use the [Conan package manager](https://conan.io/) to get the required third parties,
+such as `gRPC`, `boost` and `fmt`.
 
 ## Setup
 
-``` sh
+We need python to use conan.
+
+```sh
 python3 -m venv penv
 source penv/bin/activate
 pip install -r requirements.txt
+```
+
+Install the external libraries.
+
+```sh
 ./install_deps.sh
 ```
 
 ## Build
 
-``` sh
-mkdir build-debug
-cd build-debug
-cmake .. -DCMAKE_TOOLCHAIN_FILE=../deps/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug
+Build all applications
+
+```sh
+mkdir build
+cd build
+cmake -DCMAKE_TOOLCHAIN_FILE=../deps/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release ..
 make -j8
 ```
-and run
+and run the server
 
-``` sh
+```sh
 ./bin/lotr
 ```
+and the clients
 
-``` sh
+```sh
 ./bin/sync-client
 ```
+
+```sh
+./bin/async-client
+```
+
+Game on!
