@@ -10,6 +10,8 @@ class SyncClient
 public:
     SyncClient(std::string_view address, std::uint16_t port);
 
+    bool connected() const;
+
     std::optional<lotr::proto::MordorPopulation> population();
     std::optional<std::uint64_t> kill_orcs(std::string_view weapon_name, float power);
 

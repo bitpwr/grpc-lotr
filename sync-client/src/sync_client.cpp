@@ -10,6 +10,11 @@ SyncClient::SyncClient(std::string_view address, std::uint16_t port)
 {
 }
 
+bool SyncClient::connected() const
+{
+    return m_grpc_client.connected();
+}
+
 std::optional<lotr::proto::MordorPopulation> SyncClient::population()
 {
     google::protobuf::Empty request;
@@ -25,11 +30,6 @@ std::optional<lotr::proto::MordorPopulation> SyncClient::population()
           "Error: {}: {}\n", static_cast<int>(status.error_code()), status.error_message());
         return std::nullopt;
     }
-
-    fmt::print("Mordor population\n");
-    fmt::print(" Orcs: {}\n", response.orc_count());
-    fmt::print(" Trolls: {}\n", response.troll_count());
-    fmt::print(" Nazguls: {}\n", response.nazgul_count());
 
     return response;
 }
@@ -49,11 +49,6 @@ std::optional<std::uint64_t> SyncClient::kill_orcs(std::string_view weapon_name,
           "Error: {}: {}\n", static_cast<int>(status.error_code()), status.error_message());
         return std::nullopt;
     }
-
-    fmt::print("Kill result\n");
-    fmt::print(" Dead orcs: {}\n", response.orcs_killed());
-    fmt::print(" Dead trolls: {}\n", response.trolls_killed());
-    fmt::print(" Dead nazguls: {}\n", response.nazguls_killed());
 
     return response.orcs_killed();
 }
