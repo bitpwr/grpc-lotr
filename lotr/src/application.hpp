@@ -9,6 +9,7 @@
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/signal_set.hpp>
+#include <boost/asio/steady_timer.hpp>
 
 namespace lotr {
 
@@ -21,8 +22,12 @@ public:
     void shutdown();
 
 private:
+    void start_timer();
+    void on_timer();
+
     boost::asio::io_context m_context;
     boost::asio::signal_set m_signals;
+    boost::asio::steady_timer m_status_timer;
     MiddleEarth m_middleEarth;
     ServiceCallbacks m_callbacks;
     SyncService m_sync_service;

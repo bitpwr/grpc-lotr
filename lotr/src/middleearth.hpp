@@ -9,11 +9,6 @@
 
 namespace lotr {
 
-struct Status
-{
-    float mordor_strength{};
-};
-
 class MiddleEarth
 {
 public:
@@ -27,6 +22,7 @@ public:
     void shutdown();
 
     const MordorPopulation& mordor_population();
+    const GameStatus& status();
     std::optional<std::uint64_t> kill_orcs(std::string_view weapon, float power);
 
 private:
@@ -36,7 +32,7 @@ private:
     boost::asio::io_context& m_context;
     boost::asio::steady_timer m_timer;
     Callbacks m_callbacks;
-    Status m_status{};
+    GameStatus m_status{};
     MordorPopulation m_mordor_population{};
 };
 

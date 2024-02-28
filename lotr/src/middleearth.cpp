@@ -46,6 +46,11 @@ const MordorPopulation& MiddleEarth::mordor_population()
     return m_mordor_population;
 }
 
+const GameStatus& MiddleEarth::status()
+{
+    return m_status;
+}
+
 std::optional<std::uint64_t> MiddleEarth::kill_orcs(std::string_view weapon, float power)
 {
     fmt::print("kill orcs using '{}' with {}%\n", weapon, power);
@@ -82,9 +87,12 @@ void MiddleEarth::on_timer()
                                 static_cast<float>(m_mordor_population.troll_count) * 3.0f +
                                 static_cast<float>(m_mordor_population.nazgul_count) * 100.0f) /
                                1.0e6f;
-    fmt::print("Mordor strenght: {:.1f}%\n", m_status.mordor_strength * 100);
 
-    if (m_status.mordor_strength >= 1) {
+    if (m_status.mordor_strength < 1) {
+        fmt::print("Mordor strength: {:.1f}%, Orc count: {}\n",
+                   m_status.mordor_strength * 100,
+                   m_mordor_population.orc_count);
+    } else {
         fmt::print("Sauron has taken over Middle Earth. The end is here...\n");
         m_timer.cancel();
         m_callbacks.game_over();
