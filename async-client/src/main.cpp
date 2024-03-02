@@ -6,6 +6,16 @@
 #include <boost/asio/streambuf.hpp>
 #include <fmt/format.h>
 #include <iostream>
+#include <random>
+
+float random_power()
+{
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    static std::uniform_real_distribution<float> dist(0.6f, 0.9f);
+
+    return dist(gen);
+}
 
 class Application
 {
@@ -48,16 +58,17 @@ public:
                         fmt::print(" Nazguls: {}\n", response.nazgul_count());
                     });
               } else if (cmd == "k") {
-                  client.kill_orcs(
-                    "Glamdring", 0.7f, [](const grpc::Status& status, std::uint64_t orcs_killed) {
-                        if (!status.ok()) {
-                            fmt::print("Failed to kill orcs, error:  {}, {}\n",
-                                       static_cast<int>(status.error_code()),
-                                       status.error_message());
-                            return;
-                        }
-                        fmt::print("Yay, killed {} orcs\n", orcs_killed);
-                    });
+                  client.kill_orcs("Glamdring",
+                                   random_power(),
+                                   [](const grpc::Status& status, std::uint64_t orcs_killed) {
+                                       if (!status.ok()) {
+                                           fmt::print("Failed to kill orcs, error:  {}, {}\n",
+                                                      static_cast<int>(status.error_code()),
+                                                      status.error_message());
+                                           return;
+                                       }
+                                       fmt::print("Yay, killed {} orcs\n", orcs_killed);
+                                   });
               } else if (cmd == "c") {
                   fmt::print("Connected: {}\n", client.connected());
               } else if (cmd == "s") {

@@ -53,7 +53,7 @@ const GameStatus& MiddleEarth::status()
 
 std::optional<std::uint64_t> MiddleEarth::kill_orcs(std::string_view weapon, float power)
 {
-    fmt::print("kill orcs using '{}' with {}%\n", weapon, power);
+    fmt::print("kill orcs using '{}' with {:.1f}%\n", weapon, power);
     const auto orcs_killed = static_cast<std::uint64_t>(
       static_cast<float>(m_mordor_population.orc_count) * power * random_effect());
     m_mordor_population.orc_count -= orcs_killed;
