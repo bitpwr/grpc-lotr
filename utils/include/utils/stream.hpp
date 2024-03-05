@@ -205,10 +205,9 @@ public:
             return;
         }
 
-        boost::asio::post(m_io_context, [this]() {
-            m_message_handler(m_message);
-            this->StartRead(&m_message);
-        });
+        boost::asio::post(m_io_context,
+                          [this, msg = std::move(m_message)]() { m_message_handler(msg); });
+        this->StartRead(&m_message);
     }
     void OnDone(const grpc::Status& status) override
     {

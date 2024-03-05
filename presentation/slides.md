@@ -9,19 +9,18 @@ paginate: true
 
 ## Hands on approach to use gRPC with C++
 
-<br></br>
+<br>
+<br>
+
 _Per-Magnus Holtmo_
+
+![bg right:40%](mordor.jpg)
 
 ---
 
 # Micro service architecture
 
 ![width:1000px](services.png)
-
-<!--
-how to setup safe, stable, efficient, easy to work with
-connection handling and messaging
--->
 
 ---
 
@@ -62,26 +61,11 @@ or...
 - **1.61** 'g' stands for '**grand**'
 - **1.62** 'g' stands for '**guardian**'
 
-
 ---
 
 # Lord of the Rings game using gRPC
 
-<!--
-Lets make a simple game engine for lord of the rings
-we must stop Sauron and Mordor from taking over middle earth
-
-today I gonna tell you about gRPC and how it works
-It is a very large library, will cover the basics
-
-I will explain concept using code examples - a lot of code
-
-I will skip some details and focus on the basics for better understanding
-all details are available in GitHub if anyone wants more
-
--->
-
-- Server exposing a gRPC service
+- Server exposing a gRPC interface
 - Client applications
 - Server interface library
 - Synchronous and asynchronous examples
@@ -93,7 +77,7 @@ all details are available in GitHub if anyone wants more
 
 - Define interface in a protocol buffers file, `.proto`
 - Generate `C++` code
-- Build a library
+- Make a library
 
 ---
 
@@ -121,13 +105,6 @@ message AttackResult {
 }
 ```
 
-<!--
-gRpc uses google protobuf
-package -> namespace,
-message -> classed with getters and setters
-add repeated field
--->
-
 ---
 
 # Protocol buffers
@@ -152,10 +129,6 @@ weapon.ParseFromString(data);
 const auto name = weapon.name();
 ```
 
-<!--
-string is normally used as data buffer, can use array and streams
--->
-
 ---
 
 # Interface functions - RPC
@@ -178,16 +151,6 @@ protoc --grpc_out=build/proto --plugin=protoc-gen-grpc=grpc_cpp_plugin lotr.prot
 ```
 Output: `lotr.grpc.pb.h` and `lotr.grpc.pb.cc`
 
-
-<!---
-- Unary RPC
-- Server streaming
-- Client streaming
-- Bidirectional streaming
-
-no need to think about error codes, that is implicitly handled, will show later
--->
-
 ---
 
 # Make a library with the interface code
@@ -200,13 +163,6 @@ include(../cmake/grpc.cmake)
 
 generate_proto_cpp(lotr-proto protos/lotr.proto)
 ```
-
-<!---
-- good practice
-- used by both server and client
-- can be given a version, generated at build time, can ask server for protocol version
-- provides include paths to headers
--->
 
 ---
 
@@ -235,10 +191,6 @@ public:
                                    proto::MordorPopulation* response) override;
 };
 ```
-<!--
-include generated file, subclass a service - many options, here the most simple for sync
-override methods
--->
 ---
 
 # Service implementation
@@ -255,12 +207,6 @@ grpc::Status SyncService::mordor_population(grpc::ServerContext*,
     return grpc::Status::OK;
 }
 ```
-
-<!--
-CALLED FROM GRPC THREAD POOL, ensure to guard shared data
-returned Status - error code and message, predefined error codes
--->
-
 ---
 
 # We need a Server to host the service
@@ -309,8 +255,13 @@ void GrpcServer::shutdown()
 
 # Time to make a client
 
+<br>![width:800px](channel.jpg)
+<br>
+
+Define
 - Generic client, holding gRPC _channel_ and _stub_
 - Specialized client
+
 
 ---
 
@@ -333,12 +284,6 @@ private:
     std::unique_ptr<typename Service::Stub> m_stub;
 };
 ```
-
-<!--
-Generic, can be reused for any service
-- channel provides a connection to a gRPC server on a specified host and port
-- stub is create on client side form the channel - provides function api
--->
 
 ---
 
@@ -385,9 +330,6 @@ std::optional<proto::MordorPopulation> SyncClient::population()
 }
 ```
 
-<!--
-CALL WILL BLOCK - synchronous
---->
 ---
 
 # ClientContext options
@@ -421,41 +363,27 @@ grpc::reflection::InitProtoReflectionServerBuilderPlugin();
 - List services, methods, arguments
 - Call methods
 
-<!--
-reflection: can make cli, query for service, methods, arguments and make calls
-These are the basics, will make this step by step
--->
-
 ---
 
 # Demo
+
+![bg left:60%](mordor3.webp)
 
 ---
 
 # But there is a problem...
 
-<!--
-- we make an attack, using best wapon, will just stand still waiting, waiting for the result, cannot move
-- leaving us vulnerable, easy target
-- we need to be able to move right after the attack
-- we need asynchronous message handling
--->
+![bg right:40%](nazgul.webp)
 
 ---
 
-# Asynchronous message handling
+# We need asynchronous message handling
 
 **Do not use the suggested async api!**
 
+<br>
+
 _But there is a callback interface..._
-
-<!--
-Way too much boiler plate
-Completion queues, polling or waiting, threading etc etc, will not mention it
-
-callback interface makes unary async calls very simple
-stream calls still requires lot of extra code, maybe it will be improved as well
--->
 
 ---
 
@@ -503,117 +431,39 @@ grpc::ServerUnaryReactor* AsyncService::mordor_population(grpc::CallbackServerCo
 }
 ```
 
-<!--
-called by grpc thread, must return directly
-for unary calls, there is a simple reactor to use, return directly, later call Finish() on it to
-return to client
-
-using boost asio to handover to main thread, access state
-access state, set response, call Finish()
-
-common setup, we could add helper function, we could check arguments, add error handling
-will show in a bit
-
-BUT there is a problem with this simple setup
-When we are shutting down the server, the main thread is about to stop grpc server
-there might come a call, post to asio context, will never be run and finish will never be called
--->
-
 ---
 
-# UnaryExecutor
-
-```cpp
-class UnaryExecutor
-{
-public:
-    explicit UnaryExecutor(boost::asio::io_context& context);
-
-    void shutdown();
-
-    grpc::ServerUnaryReactor* execute(grpc::CallbackServerContext* callback_context,
-                                      const std::function<grpc::Status()>& work);
-
-private:
-    boost::asio::io_context& m_io_context;
-    std::atomic<bool> m_block{ false };
-};
-```
-
----
-
-# UnaryExecutor
-
-```cpp
-void UnaryExecutor::shutdown()
-{
-    m_block = true;
-}
-
-grpc::ServerUnaryReactor* UnaryExecutor::execute(grpc::CallbackServerContext* callback_context,
-                                                 const std::function<grpc::Status()>& work)
-{
-    auto reactor = callback_context->DefaultReactor();
-
-    if (m_block) {
-        reactor->Finish(grpc::Status::CANCELLED);
-        return reactor;
-    }
-
-    boost::asio::post(m_io_context, [reactor, work]() {
-        const auto status = work();
-        reactor->Finish(std::move(status));
-    });
-
-    return reactor;
-}
-```
-<!--
-Class, has a asio context and a blocking flag
-execute(), provide function that returns gprc status
-if block, set cancel and return
-otherwise, call func and mark the result
-
-Let's see how it can be used
--->
----
-
-# UnaryExecutor usage
+# Service shutdown guard
 
 ```cpp
 grpc::ServerUnaryReactor* AsyncService::kill_orcs(grpc::CallbackServerContext* context,
                                                   const proto::Weapon* request,
                                                   proto::AttackResult* response)
 {
+    auto reactor = context->DefaultReactor();
+
+    if (m_shutting_down) {
+        reactor->Finish(grpc::Status::CANCELLED);
+        return reactor;
+    }
+
     if (request->power() < 0 || request->power() > 1) {
-        auto reactor = context->DefaultReactor();
         reactor->Finish({ grpc::StatusCode::INVALID_ARGUMENT, "Power must be between 0 and 1" });
         return reactor;
     }
 
-    return m_executor.execute(context, [this, request, response]() {
-        const auto result = m_callbacks.kill_orcs(request->name(), request->power());
-        if (!result) {
-            return grpc::Status{ grpc::StatusCode::INTERNAL, "Too late, Sauron has taken over" };
-        }
-
-        response->set_orcs_killed(result.value());
-        return grpc::Status::OK;
+    boost::asio::post(m_io_context, [reactor, request, response, this] {
+        ...
+        reactor->Finish(grpc::Status::OK);
     });
+
+    return reactor;
 }
 ```
-<!--
-In our overridden function,
-first quick check of arguments
-the call execute(), providing a simple function, only focusing on the state handling
- - called on main thread
- - check result
- - fill response
--->
 
 ---
 
-# Async client definition
+# Asynchronous client definition
 
 ```cpp
 class AsyncClient
@@ -632,14 +482,6 @@ private:
     GrpcClient<proto::LotrService> m_grpc_client;
 };
 ```
-
-<!--
-similar to the sync client
-here we use boost asio to do the work
-
-here we have void functions, but provide a callback
-
--->
 
 ---
 
@@ -662,20 +504,9 @@ struct ClientState
 };
 ```
 
-<!--
-for the sync case, we used function on the stub directly
-and there is an async object where the callback functions hide
-
-provide a context, request, response, and a callback with the status result
-this func will return directly, but we need to keep track of the provided objects
-they muse be kept in memory until the callback is called. And there may be many calls before
-the first returns....
-
-so that is the state we must store util done
--->
 ---
 
-# Async client implementation
+# Asynchronous client implementation
 
 ```cpp
 void AsyncClient::kill_orcs(std::string_view weapon_name, float power, KillHandler handler)
@@ -700,21 +531,6 @@ void AsyncClient::kill_orcs(std::string_view weapon_name, float power, KillHandl
 }
 ```
 
-<!--
-Create the state as a shared pointer
-- set request values, optional context options
-
-call function, provide pointers to objects
-and a lambda for the status result, capture the state in a lambda to keep it alive, handler
-
-callback called by grpc, must handover to our main thread, here using boost asio again
-
-call handler with result on main thread
-client does not have to bother about threading
-as soon as post calls returns, state object is deleted, no more references left
-
--->
-
 ---
 
 # Message streaming
@@ -724,21 +540,14 @@ as soon as post calls returns, state object is deleted, no more references left
   - Get state
 - But some kind of event notification would be nice
 
-<!--
----
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
 
-# Some streaming
-
-maybe show simplest writer/reader
-no specific error handling
-and mentions the problems
-READER: destructor must wait for on done, conditional_variable, mutex etc
-
-and we have several clients connected (must copy message)
-
-SENDER: must hold on to message, until sent, could move message, but must support many clients, keep until all done
-- how to send new message when prev is not sent, skip, buffer (how large), are you sending regularly or just at change
--->
+![bg brightness:1.5](stream.webp)
 
 ---
 
@@ -758,23 +567,6 @@ grpc::ServerWriteReactor<proto::GameStatus>* subscribeToStatus(
       const google::protobuf::Empty* request) override;
 ```
 
-<!--
-send stream example, client requests a set of messages, server sends as fast as possible, then done
-might be use cases, can be solved with array of messages in a message
-
-more interesting to turn info subscription, kept alive forever
-
-you would also know that the server is running, otherwise the subscription fails
-and you could try to resubscribe
-Could have any number of clients connected, all would get the same status
-
-we return a writerReactor - for unary calls, use the default, simple, but for streams, we must impl
-our own
-
-no response variable - use the writeReactor
-
--->
-
 ---
 
 # Server streaming
@@ -784,11 +576,6 @@ no response variable - use the writeReactor
 * Update our service
 
 ---
-
-<!--
-will skip shutdown, will take too long time
-but as I said, shutting down is the hard part, will have that code available on GitHub
--->
 
 # MessageWriter
 
@@ -829,33 +616,7 @@ void OnWriteDone(bool) override
 }
 ```
 _Must guard members..._
-<!--
----
 
-# MessageWriter shutting down
-
-
-```cpp
-void shutdown()
-{
-    if (!m_done) {
-        this->Finish(grpc::Status(grpc::ABORTED, "Service shutdown"));
-        m_done = true;
-    }
-}
-
-void OnDone() override
-{
-    this->m_context.post([this]() { m_done_callback(); });
-}
-
-void OnCancel() override
-{
-    m_done = true;
-    this->Finish(grpc::Status::CANCELLED);
-}
-```
--->
 ---
 
 # StreamWriter to handle multiple clients
@@ -880,9 +641,8 @@ private:
 ```cpp
 grpc::ServerWriteReactor<Message>* StreamWriter::create_writer()
 {
-    ++m_id;
     auto& w = m_writers.emplace_back(
-                std::make_unique<MessageWriter<Message>>(...), m_id);
+                std::make_unique<MessageWriter<Message>>(...), ++m_id);
 
     return w.writer.get();
 }
@@ -893,38 +653,6 @@ void StreamWriter::send_message(const Message& msg)
         [&msg](auto& w) { w.writer->send_message(msg); });
 }
 ```
-<!--
-There is some more thread handling required,
-create_writer() called on gRPC thread, protect vector and block at shutdown
--->
-
-<!--
-
----
-
-# StreamWriter shutting down
-
-
-```cpp
-void StreamWriter::shutdown()
-{
-    std::ranges::for_each(m_writers, [](auto& w) { w.writer->shutdown(); });
-    while (!m_writers.empty()) {
-        m_context.run_one_for(std::chrono::milliseconds{ 10 });
-    }
-}
-
-void StreamWriter::remove_writer(std::uint32_t id)
-{
-    const auto it = std::ranges::find_if(m_writers,
-        [id](const auto& w) { return w.id == id; });
-
-    if (it != m_writers.end()) {
-        m_writers.erase(it);
-    }
-}
-```
--->
 
 ---
 
@@ -993,10 +721,10 @@ void StreamReader::start()
 void StreamReader::OnReadDone(bool ok) override
 {
     if (ok) {
-        boost::asio::post(m_io_context, [this]() {
-            m_message_handler(m_message);
-            StartRead(&m_message);
-        });
+        boost::asio::post(m_io_context,
+                          [this, msg = std::move(m_message)]() {
+                              m_message_handler(msg); });
+        StartRead(&m_message);
     }
 }
 ```
@@ -1031,6 +759,8 @@ void AsyncClient::subscribeToStatus()
 
 # Demo
 
+![bg left:60%](orcs.jpg)
+
 ---
 
 # Are we connected?
@@ -1039,12 +769,6 @@ void AsyncClient::subscribeToStatus()
 - `gRPC` keep alive channel option
 - Use any `gRPC` message and check response status
 - Keep an open server stream, will be notified when disconnected
-
-<!--
-BUT if you know NOW we are connected, everything is fine, then when you do something,
-connection might have been lost - so it does not say that much
-=> ensure your services are always running (systemd or other means) and proper error handling
--->
 
 ---
 
@@ -1065,6 +789,7 @@ connection might have been lost - so it does not say that much
 - Feature bloat for small projects
 - Not the best documentation
 - Complex streaming
+- Message intensive
 - Hard to shut down server
 - HTTP/2 but still not supported by browsers
 
@@ -1091,3 +816,5 @@ connection might have been lost - so it does not say that much
 Source code and presentation available at
 
 ## [github.com/bitpwr/grpc-lotr](https://github.com/bitpwr/grpc-lotr)
+
+![bg right:40% width:300px](ring.jpg)
